@@ -1,0 +1,109 @@
+CONFIGURAÇÃO E AMBIENTE DOS EXPERIMENTOS
+========================================
+Gerado por scripts/extrair_resultados.py
+
+Ambiente
+--------
+Python: 3.15.2 (Windows-11-10.0.26200-SP0)
+scikit-learn: 1.9.1
+NumPy: 2.5.4
+pandas: 3.1.1
+
+Dados
+-----
+Arquivo: data/creditcard.csv
+Dimensões: 284807 linhas x 31 colunas
+Fraudes no dataset completo: 492
+
+Split (src/data.py)
+-------------------
+train_test_split(test_size=0.2, stratify=y, random_state=seed)
+Por seed:
+  seed=0: teste=56962 transações, 98 fraudes; treino=227845 transações, 394 fraudes
+  seed=1: teste=56962 transações, 98 fraudes; treino=227845 transações, 394 fraudes
+  seed=2: teste=56962 transações, 98 fraudes; treino=227845 transações, 394 fraudes
+  seed=3: teste=56962 transações, 98 fraudes; treino=227845 transações, 394 fraudes
+  seed=4: teste=56962 transações, 98 fraudes; treino=227845 transações, 394 fraudes
+
+Hiperparâmetros (src/config.py e src/model.py)
+----------------------------------------------
+seeds = [0, 1, 2, 3, 4]
+alphas = [0.1, 0.5, 1.0]
+K = n_clients = 5 (partição Dirichlet, min_size=10, max_tries=1000)
+rounds = 20
+local_epochs = 1
+tau = 10 (método adaptativo)
+r = 10
+n_piso = 100
+lambda = 1e-4 (parâmetro alpha do SGDClassifier, penalty="l2")
+eta = 0.01 (eta0, learning_rate="constant")
+Modelo = SGDClassifier(loss="log_loss", penalty="l2", alpha=1e-4,
+                       learning_rate="constant", eta0=0.01, random_state=seed)
+Limiar de decisão = 0.5 (model.predict padrão)
+Métrica de ranking = average_precision_score (AUPRC)
+
+Métodos de balanceamento implementados
+--------------------------------------
+1) sem_balanceamento: tau = 1e9. Como n_fraudes < tau sempre, adaptive_undersample
+   devolve X e y intactos.
+2) adaptativo: tau = 10, r = 10, n_piso = 100.
+   - se n_fraudes < 10: devolve X e y intactos (undersampling suspenso; o cliente
+     CONTINUA treinando com todos os dados);
+   - senão: n_keep = max(10 * n_fraudes, 100) legítimas; se houver mais legítimas
+     que n_keep, sorteia n_keep sem reposição; todas as fraudes são mantidas.
+3) random_undersampling_tau0 (chamado de "uniforme" em results/raw/): tau = 0,
+   r = 10, n_piso = 100.
+   - como n_fraudes < 0 nunca ocorre, a regra de suspensão não é acionada;
+   - n_keep = max(10 * n_fraudes, 100). Portanto NÃO é um undersampling uniforme
+     para 100 exemplos: é a mesma regra do adaptativo, mas aplicada também aos
+     clientes com 0 a 9 fraudes.
+   - para clientes com >= 10 fraudes, adaptativo e tau=0 são idênticos.
+
+SMOTE: NÃO IMPLEMENTADO no código atual. Não há valor de k vizinhos a reportar
+       e não há resultados salvos para esse método.
+Class Weight: NÃO IMPLEMENTADO no código atual. Não há valor de class_weight a
+       reportar e não há resultados salvos para esse método.
+
+Variantes de peso do FedAvg (src/federated.py)
+----------------------------------------------
+pre:  n_examples = len(y) original do cliente (antes do balanceamento)
+post: n_examples = len(y) após o undersampling
+O FedAvg usado é a média ponderada de coef_ e intercept_ pelo n_examples.
+
+Arquivos de origem
+------------------
+results/raw/resultados.csv: métricas da última rodada de cada execução
+results/raw/particoes.csv: composição de cada cliente por seed x alpha
+results/raw/resumo.csv: resumo antigo (arredondado) gerado por src/run_all.py
+
+Observações
+-----------
+- As métricas de metricas_finais_por_seed.csv vêm de results/raw/resultados.csv
+  (última rodada, teste centralizado, limiar 0,5).
+- O desvio padrão em metricas_resumo.csv é o desvio padrão amostral (ddof=1)
+  sobre as 5 seeds.
+- O histórico por rodada não estava salvo em results/raw. O arquivo
+  auprc_por_rodada.csv foi gerado reexecutando o código atual com as mesmas
+  seeds, alphas, hiperparâmetros e split. A última rodada foi conferida contra
+  results/raw/resultados.csv. A coluna "rodada" começa em 0 (rodadas 0 a
+  19); a Figura 2 do artigo mostra 1 a 20.
+- desvios_ultimas_rodadas.csv: desvio padrão amostral (ddof=1) da AUPRC nas
+  5 últimas rodadas, calculado entre as rodadas dentro de cada
+  seed e depois com média entre as seeds (não é o desvio entre seeds).
+- As ações por cliente foram reconstruídas a partir de results/raw/particoes.csv e
+  da regra determinística de adaptive_undersample. O código não registra os
+  índices exatos sorteados em cada rodada, apenas a quantidade de legítimas
+  mantidas.
+- "suspender" significa que o undersampling foi suspenso para aquele cliente;
+  ele NÃO foi removido do treinamento federado.
+
+Comandos
+--------
+# Regenerar os resultados brutos (não executado por este script):
+python src/run_all.py
+
+# Gerar a exportação:
+python scripts/extrair_resultados.py
+
+# Gerar a exportação sem reexecutar o histórico por rodada:
+python scripts/extrair_resultados.py --sem-historico
