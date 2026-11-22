@@ -7,8 +7,8 @@ from data import load_and_split, dirichlet_partition
 from federated import run_federated   # ajuste para o arquivo onde estão run_federated/fedavg/local_train
 
 BASE_DIR = Path(__file__).parent.parent
-RESULTS_DIR = BASE_DIR / "results"
-RESULTS_DIR.mkdir(exist_ok=True)
+RESULTS_DIR = BASE_DIR / "results" / "raw"
+RESULTS_DIR.mkdir(parents=True, exist_ok=True)
 
 VARIANTES = {
     "sem_balanceamento": 10**9,
